@@ -21,19 +21,19 @@ clock = pygame.time.Clock()
 #configurações básicas dos assets (player, fundo, sons, etc) [se não souber fazer, é só colocar o arquivo dentro da mesma pasta do .py e copiar o url e colar entre as aspas ali]
 ASSETS = {
     "background": "-",
-    "background_fase1": "c:/Users/Guilherme/Desktop/Aura Farming Pony/background1.png",  
-    "background_fase2": "c:/Users/Guilherme/Desktop/Aura Farming Pony/background2.png",  
-    "background_fase3": "c:/Users/Guilherme/Desktop/Aura Farming Pony/background3.png",
-    "player": "c:/Users/Guilherme/Desktop/Aura Farming Pony/Player1.png",
-    "player2": "c:/Users/Guilherme/Desktop/Aura Farming Pony/Player2.png",
-    "meteor": "c:/Users/Guilherme/Desktop/Aura Farming Pony/MeteorNormal.png",
-    "meteor_forte": "c:/Users/Guilherme/Desktop/Aura Farming Pony/MeteorForte.png",
+    "background_fase1": "-"  
+    "background_fase2": "-",  
+    "background_fase3": "-",
+    "player": "-",
+    "player2": "-",
+    "meteor": "-",
+    "meteor_forte": "-",
     "sound_point": "-",
     "sound_hit": "-",
     "music": "-",
-    "life": "c:/Users/Guilherme/Desktop/Aura Farming Pony/LifeCroissant.png",
-    "shield": "c:/Users/Guilherme/Desktop/Aura Farming Pony/ShieldMuffin.png",
-    "speed": "c:/Users/Guilherme/Desktop/Aura Farming Pony/SpeedApple.png",
+    "life": "-",
+    "shield": "-",
+    "speed": "-",
 }
 
 def load_image(filename, fallback_color, size):
@@ -762,3 +762,4 @@ while running:
     pygame.display.flip()
 
 pygame.quit()
+
