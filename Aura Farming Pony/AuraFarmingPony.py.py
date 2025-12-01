@@ -25,8 +25,6 @@ ASSETS = {
     "background_fase1": "-",  
     "background_fase2": "-",  
     "background_fase3": "-",
-    "background_gameover": "-",
-    "background_win": "-",
     "player": "-",
     "player2": "-",
     "meteor": "-",
@@ -37,6 +35,8 @@ ASSETS = {
     "life": "-",
     "shield": "-",
     "speed": "-",
+    "sound_shoot": "-",
+    "sound_buff": "-",
 }
 
 def load_image(filename, fallback_color, size):
@@ -57,8 +57,6 @@ background_img = load_image(ASSETS["background"], WHITE, (WIDTH, HEIGHT))
 background_fase1  = load_image(ASSETS["background_fase1"], WHITE, (WIDTH, HEIGHT))
 background_fase2  = load_image(ASSETS["background_fase2"], WHITE, (WIDTH, HEIGHT))
 background_fase3  = load_image(ASSETS["background_fase3"], WHITE, (WIDTH, HEIGHT))
-background_gameover = load_image(ASSETS["background_gameover"], WHITE, (WIDTH, HEIGHT))
-background_win = load_image(ASSETS["background_win"], WHITE, (WIDTH, HEIGHT))
 player_img  = load_image(ASSETS["player"], BLUE, (120, 90))
 player2_img = load_image(ASSETS["player2"], BLUE, (120, 90))
 meteor_img  = load_image(ASSETS["meteor"], RED, (60, 60))
@@ -89,6 +87,8 @@ except pygame.error:
 
 sound_point = load_sound(ASSETS["sound_point"])
 sound_hit   = load_sound(ASSETS["sound_hit"])
+sound_shoot = load_sound(ASSETS["sound_shoot"])
+sound_buff  = load_sound(ASSETS["sound_buff"])
 
 music_file = ASSETS["music"] if os.path.exists(ASSETS["music"]) else None
 
@@ -460,6 +460,8 @@ while running:
                     bullet_rect = pygame.Rect(px - BULLET_W // 2, py - BULLET_H // 2, BULLET_W, BULLET_H)
                     bullets.append({"rect": bullet_rect, "vx": vx, "vy": vy})
                     last_shot_time = now
+                    if sound_shoot:
+                        sound_shoot.play()
 
             elif game_state in (STATE_OVER, STATE_WIN):
                 if restart_button.collidepoint(mx, my):
@@ -716,10 +718,14 @@ while running:
                 lives1 += 1
                 life.y = random.randint(-4500, -LIFE_H)
                 life.x = random.randint(0, WIDTH - LIFE_W)
+                if sound_buff:
+                    sound_buff.play()
             if num_players == 2 and life.colliderect(player2_rect) and lives2 < 3:
                 lives2 += 1
                 life.y = random.randint(-4500, -LIFE_H)
                 life.x = random.randint(0, WIDTH - LIFE_W)
+                if sound_buff:
+                    sound_buff.play()
 
         for shield in shield_list:
             shield.y += meteor_speed - 1
@@ -730,10 +736,14 @@ while running:
                 shield1_active = True
                 shield.y = random.randint(-4500, -SHIELD_H)
                 shield.x = random.randint(0, WIDTH - SHIELD_W)
+                if sound_buff:
+                    sound_buff.play()
             if num_players == 2 and shield.colliderect(player2_rect):
                 shield2_active = True
                 shield.y = random.randint(-4500, -SHIELD_H)
                 shield.x = random.randint(0, WIDTH - SHIELD_W)
+                if sound_buff:
+                    sound_buff.play()
 
         for sp in speed_list:
             sp.y += meteor_speed - 1
@@ -744,10 +754,14 @@ while running:
                 speed1_timer = FPS * 5
                 sp.y = random.randint(-6000, -SPEED_H)
                 sp.x = random.randint(0, WIDTH - SPEED_W)
+                if sound_buff:
+                    sound_buff.play()
             if num_players == 2 and sp.colliderect(player2_rect):
                 speed2_timer = FPS * 5
                 sp.y = random.randint(-6000, -SPEED_H)
                 sp.x = random.randint(0, WIDTH - SPEED_W)
+                if sound_buff:
+                    sound_buff.play()
 
         if num_players == 1 and lives1 <= 0:
             game_state = STATE_OVER
@@ -824,7 +838,7 @@ while running:
             phase_alert_timer -= 1
 
     elif game_state == STATE_OVER:
-        screen.blit(background_gameover, (0, 0))
+        screen.blit(background_img, (0, 0))
 
         box = pygame.Surface((750, 480))
         box.set_alpha(230)
@@ -870,7 +884,7 @@ while running:
         screen.blit(tl, tl.get_rect(center=leaderboard_button.center))
 
     elif game_state == STATE_WIN:
-        screen.blit(background_win, (0, 0))
+        screen.blit(background_img, (0, 0))
 
         box = pygame.Surface((750, 480))
         box.set_alpha(230)
@@ -885,7 +899,7 @@ while running:
         screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, box_rect.top + 130)))
 
         if num_players == 1:
-            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyidos}  Vidas finais: {lives1}", True, BLACK)
+            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyídos}  Vidas finais: {lives1}", True, BLACK)
             screen.blit(tstats, tstats.get_rect(center=(WIDTH//2, box_rect.top + 170)))
             tname = small_font.render(f"Seu nome: {name_input}", True, BLACK)
             screen.blit(tname, tname.get_rect(center=(WIDTH//2, box_rect.top + 210)))
@@ -934,7 +948,7 @@ while running:
         screen.blit(tb, tb.get_rect(center=back_button.center))
 
     elif game_state == STATE_PVP_WIN:
-        screen.blit(background_win, (0, 0))
+        screen.blit(background_img, (0, 0))
 
         box = pygame.Surface((750, 375))
         box.set_alpha(230)
