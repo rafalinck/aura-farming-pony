@@ -1,7 +1,8 @@
-import pygame
+import pygame 
 import random
 import os
 import json
+import math
 
 pygame.init()
 
@@ -21,7 +22,7 @@ clock = pygame.time.Clock()
 #configurações básicas dos assets (player, fundo, sons, etc) [se não souber fazer, é só colocar o arquivo dentro da mesma pasta do .py e copiar o url e colar entre as aspas ali]
 ASSETS = {
     "background": "-",
-    "background_fase1": "-"  
+    "background_fase1": "-",  
     "background_fase2": "-",  
     "background_fase3": "-",
     "player": "-",
@@ -101,13 +102,14 @@ font       = pygame.font.Font(None, 54)
 big_font   = pygame.font.Font(None, 108)
 small_font = pygame.font.Font(None, 42)
 
-STATE_MENU    = "MENU"
-STATE_PLAYING = "JOGANDO"
-STATE_OVER    = "GAME_OVER"
-STATE_WIN     = "VITORIA"
-STATE_CREDITS = "CREDITOS"
-STATE_PAUSED  = "PAUSADO"
-STATE_PVP_WIN = "VITORIA_PVP"
+STATE_MENU        = "MENU"
+STATE_PLAYING     = "JOGANDO"
+STATE_OVER        = "GAME_OVER"
+STATE_WIN         = "VITORIA"
+STATE_CREDITS     = "CREDITOS"
+STATE_PAUSED      = "PAUSADO"
+STATE_PVP_WIN     = "VITORIA_PVP"
+STATE_LEADERBOARD = "LEADERBOARD"
 
 game_state = STATE_MENU
 
@@ -128,7 +130,13 @@ NUM_METEORS = 6
 meteor_speed = 3
 
 strong_meteor_list = []
-NUM_STRONG_METEORS = 1
+NUM_STRONG_METEORS = NUM_METEORS
+
+bullets = []
+BULLET_W, BULLET_H = 10, 25
+bullet_speed = 12
+bullet_cooldown_ms = 1500
+last_shot_time = 0
 
 life_list = []
 shield_list = []
@@ -147,6 +155,56 @@ SAVE_FILE = "savegame.json"
 has_saved_game = os.path.exists(SAVE_FILE)
 
 winner_text = ""
+
+#variáveis e funções utilizadas para o leaderboard
+LEADERBOARD_FILE = "leaderboard.json"
+leaderboard = []
+name_input = ""
+meteors_destroyed = 0
+
+def save_leaderboard():
+    try:
+        with open(LEADERBOARD_FILE, "w") as f:
+            json.dump(leaderboard, f)
+    except:
+        pass
+
+def load_leaderboard():
+    global leaderboard
+    if os.path.exists(LEADERBOARD_FILE):
+        try:
+            with open(LEADERBOARD_FILE, "r") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                leaderboard = data
+            else:
+                leaderboard = []
+        except:
+            leaderboard = []
+    else:
+        leaderboard = []
+
+#registros do leaderboard
+def add_leaderboard_entry(name, score_value, destroyed_value, lives_value):
+    global leaderboard
+    entry = {
+        "name": name if name else "SemNome",
+        "score": score_value,
+        "destroyed": destroyed_value,
+        "lives": lives_value
+    }
+    leaderboard.append(entry)
+    #faz com que a lista fique em ordem de pontuação 
+    leaderboard.sort(key=lambda e: e.get("score", 0), reverse=True)
+    save_leaderboard()
+
+def get_best_entry():
+    if leaderboard:
+        return leaderboard[0]
+    return None
+
+#carrega o leaderboard ao iniciar a partida
+load_leaderboard()
 
 #funções para salvar e carregar o estado atual do jogo em arquivo
 def save_game():
@@ -169,6 +227,7 @@ def save_game():
         "speed_list": [[r.x, r.y] for r in speed_list],
         "speed1_timer": speed1_timer,
         "speed2_timer": speed2_timer,
+        "meteors_destroyed": meteors_destroyed,
     }
     with open(SAVE_FILE, "w") as f:
         json.dump(data, f)
@@ -178,7 +237,7 @@ def load_game():
     global player_rect, player2_rect, meteor_speed, meteor_list, game_state
     global life_list, shield_list, shield1_active, shield2_active
     global speed_list, speed1_timer, speed2_timer
-    global strong_meteor_list
+    global strong_meteor_list, bullets, meteors_destroyed, name_input
 
     if not os.path.exists(SAVE_FILE):
         return False
@@ -211,12 +270,15 @@ def load_game():
     life_list = []
     shield_list = []
     speed_list = []
+    bullets = []
 
     life_coords = data.get("life_list")
     shield_coords = data.get("shield_list")
     speed_coords = data.get("speed_list")
     speed1_timer = data.get("speed1_timer", 0)
     speed2_timer = data.get("speed2_timer", 0)
+    meteors_destroyed = data.get("meteors_destroyed", 0)
+    name_input = ""
 
     if life_coords is not None:
         for x, y in life_coords:
@@ -300,9 +362,12 @@ start2_button = pygame.Rect(WIDTH//2 - button_width//2, HEIGHT//2 + 210,
                             button_width, button_height)
 credits_button = pygame.Rect(WIDTH//2 - button_width//2, HEIGHT//2 + 330,
                              button_width, button_height)
+leaderboard_menu_button = pygame.Rect(WIDTH//2 - button_width//2, HEIGHT//2 + 330,
+                                      button_width, button_height)
 
-restart_button = pygame.Rect(WIDTH//2 - 150, HEIGHT//2,      300, 75)
-quit_button    = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 90, 300, 75)
+restart_button = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 - 10, 300, 60)
+quit_button    = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 60, 300, 60)
+leaderboard_button = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 130, 300, 60)
 
 back_button = pygame.Rect(20, HEIGHT - 90, 240, 60)
 
@@ -311,11 +376,10 @@ pause_menu_button     = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 90, 300, 75)
 
 pvp_menu_button = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 90, 300, 75)
 
-#código para reiniciar o jogo
 def reset_game():
     global score, lives1, lives2, game_state, phase_name, has_saved_game
     global shield1_active, shield2_active, speed1_timer, speed2_timer
-    global strong_meteor_list
+    global strong_meteor_list, bullets, last_shot_time, meteors_destroyed, name_input
 
     score = 0
     lives1 = 3
@@ -327,6 +391,10 @@ def reset_game():
     speed1_timer = 0
     speed2_timer = 0
     strong_meteor_list = []
+    bullets = []
+    last_shot_time = 0
+    meteors_destroyed = 0
+    name_input = ""
 
     if num_players == 1:
         player_rect.center  = (WIDTH // 2, HEIGHT - 90)
@@ -344,7 +412,6 @@ def reset_game():
         os.remove(SAVE_FILE)
     has_saved_game = False
 
-#loop principal do jogo
 running = True
 while running:
     clock.tick(FPS)
@@ -366,15 +433,39 @@ while running:
                 elif start2_button.collidepoint(mx, my):
                     num_players = 2
                     reset_game()
+                elif leaderboard_menu_button.collidepoint(mx, my):
+                    #para mostrar o leaderboard pelo menu principal
+                    game_state = STATE_LEADERBOARD
                 elif credits_button.collidepoint(mx, my):
                     game_state = STATE_CREDITS
                     pygame.mixer.music.stop()
+
+            elif game_state == STATE_PLAYING and num_players == 1 and phase_name != "Fase 1":
+                now = pygame.time.get_ticks()
+                if now - last_shot_time >= bullet_cooldown_ms:
+                    px, py = player_rect.center
+                    dx = mx - px
+                    dy = my - py
+                    dist = math.hypot(dx, dy)
+                    if dist != 0:
+                        vx = dx / dist * bullet_speed
+                        vy = dy / dist * bullet_speed
+                    else:
+                        vx = 0
+                        vy = -bullet_speed
+                    bullet_rect = pygame.Rect(px - BULLET_W // 2, py - BULLET_H // 2, BULLET_W, BULLET_H)
+                    bullets.append({"rect": bullet_rect, "vx": vx, "vy": vy})
+                    last_shot_time = now
 
             elif game_state in (STATE_OVER, STATE_WIN):
                 if restart_button.collidepoint(mx, my):
                     reset_game()
                 elif quit_button.collidepoint(mx, my):
                     running = False
+                elif leaderboard_button.collidepoint(mx, my):
+                    add_leaderboard_entry(name_input.strip(), score, meteors_destroyed, lives1)
+                    load_leaderboard()
+                    game_state = STATE_LEADERBOARD
 
             elif game_state == STATE_CREDITS:
                 if back_button.collidepoint(mx, my):
@@ -393,11 +484,24 @@ while running:
                 if pvp_menu_button.collidepoint(mx, my):
                     game_state = STATE_MENU
 
+            elif game_state == STATE_LEADERBOARD:
+                if back_button.collidepoint(mx, my):
+                    game_state = STATE_MENU
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE and game_state == STATE_PLAYING:
                 game_state = STATE_PAUSED
+            elif game_state in (STATE_OVER, STATE_WIN) and num_players == 1:
+                #para digitar o nome no leaderboard e também registrar no mesmo
+                if event.key == pygame.K_BACKSPACE:
+                    name_input = name_input[:-1]
+                elif event.key == pygame.K_RETURN:
+                    add_leaderboard_entry(name_input.strip(), score, meteors_destroyed, lives1)
+                    load_leaderboard()
+                else:
+                    if len(name_input) < 12 and event.unicode.isprintable() and event.unicode != "\r":
+                        name_input += event.unicode
 
-    #menu do jogo e estados
     if game_state == STATE_MENU:
         screen.blit(background_img, (0, 0))
 
@@ -416,18 +520,20 @@ while running:
         screen.blit(subtitle, subtitle.get_rect(center=(center_x, box_rect.top + 180)))
 
         if has_saved_game:
-            continue_button.center = (center_x, box_rect.top + 255)
-            start1_button.center = (center_x, box_rect.top + 345)
-            start2_button.center = (center_x, box_rect.top + 435)
-            credits_button.center = (center_x, box_rect.top + 525)
+            continue_button.center        = (center_x, box_rect.top + 255)
+            start1_button.center          = (center_x, box_rect.top + 315)
+            start2_button.center          = (center_x, box_rect.top + 375)
+            leaderboard_menu_button.center = (center_x, box_rect.top + 435)
+            credits_button.center         = (center_x, box_rect.top + 495)
 
             pygame.draw.rect(screen, WHITE, continue_button, border_radius=10)
             tcont = small_font.render("Continuar", True, BLACK)
             screen.blit(tcont, tcont.get_rect(center=continue_button.center))
         else:
-            start1_button.center = (center_x, box_rect.top + 285)
-            start2_button.center = (center_x, box_rect.top + 375)
-            credits_button.center = (center_x, box_rect.top + 465)
+            start1_button.center          = (center_x, box_rect.top + 285)
+            start2_button.center          = (center_x, box_rect.top + 345)
+            leaderboard_menu_button.center = (center_x, box_rect.top + 405)
+            credits_button.center         = (center_x, box_rect.top + 465)
 
         pygame.draw.rect(screen, WHITE, start1_button, border_radius=10)
         t1 = small_font.render("Novo jogo (1 Jogador)", True, BLACK)
@@ -436,6 +542,10 @@ while running:
         pygame.draw.rect(screen, WHITE, start2_button, border_radius=10)
         t2 = small_font.render("Novo jogo (2 Jogadores)", True, BLACK)
         screen.blit(t2, t2.get_rect(center=start2_button.center))
+
+        pygame.draw.rect(screen, WHITE, leaderboard_menu_button, border_radius=10)
+        tlm = small_font.render("Leaderboard", True, BLACK)
+        screen.blit(tlm, tlm.get_rect(center=leaderboard_menu_button.center))
 
         pygame.draw.rect(screen, WHITE, credits_button, border_radius=10)
         tc = small_font.render("Créditos", True, BLACK)
@@ -448,7 +558,6 @@ while running:
             screen.blit(background_fase2, (0, 0))
         else:
             screen.blit(background_fase3, (0, 0))
-
 
         atualizar_fase(score)
 
@@ -484,41 +593,81 @@ while running:
             if keys[pygame.K_DOWN] and player2_rect.bottom < HEIGHT:
                 player2_rect.y += p2_speed
 
-        for meteor in meteor_list:
-            meteor.y += meteor_speed
+        for bullet in bullets[:]:
+            rect = bullet["rect"]
+            rect.x += bullet["vx"]
+            rect.y += bullet["vy"]
+            if rect.bottom < 0 or rect.top > HEIGHT or rect.right < 0 or rect.left > WIDTH:
+                bullets.remove(bullet)
+                continue
+            hit = False
+            if phase_name != "Fase 3":
+                for meteor in meteor_list:
+                    if meteor.colliderect(rect):
+                        meteor.y = random.randint(-300, -METEOR_H)
+                        meteor.x = random.randint(0, WIDTH - METEOR_W)
+                        score += 1
+                        meteors_destroyed += 1
+                        if sound_point:
+                            sound_point.play()
+                        hit = True
+                        break
+            if not hit:
+                for sm in strong_meteor_list:
+                    if sm.colliderect(rect):
+                        if phase_name == "Fase 3":
+                            sm.y = random.randint(-600, -STR_METEOR_H)
+                        else:
+                            sm.y = random.randint(-6000, -STR_METEOR_H)
+                        sm.x = random.randint(0, WIDTH - STR_METEOR_W)
+                        score += 1
+                        meteors_destroyed += 1
+                        if sound_point:
+                            sound_point.play()
+                        hit = True
+                        break
+            if hit and bullet in bullets:
+                bullets.remove(bullet)
 
-            if meteor.y > HEIGHT:
-                meteor.y = random.randint(-300, -METEOR_H)
-                meteor.x = random.randint(0, WIDTH - METEOR_W)
-                score += 1
-                if sound_point:
-                    sound_point.play()
+        if phase_name != "Fase 3":
+            for meteor in meteor_list:
+                meteor.y += meteor_speed
 
-            if meteor.colliderect(player_rect) and lives1 > 0:
-                if shield1_active:
-                    shield1_active = False
-                else:
-                    lives1 -= 1
-                meteor.y = random.randint(-300, -METEOR_H)
-                meteor.x = random.randint(0, WIDTH - METEOR_W)
-                if sound_hit:
-                    sound_hit.play()
+                if meteor.y > HEIGHT:
+                    meteor.y = random.randint(-300, -METEOR_H)
+                    meteor.x = random.randint(0, WIDTH - METEOR_W)
+                    score += 1
+                    if sound_point:
+                        sound_point.play()
 
-            if num_players == 2 and meteor.colliderect(player2_rect) and lives2 > 0:
-                if shield2_active:
-                    shield2_active = False
-                else:
-                    lives2 -= 1
-                meteor.y = random.randint(-300, -METEOR_H)
-                meteor.x = random.randint(0, WIDTH - METEOR_W)
-                if sound_hit:
-                    sound_hit.play()
+                if meteor.colliderect(player_rect) and lives1 > 0:
+                    if shield1_active:
+                        shield1_active = False
+                    else:
+                        lives1 -= 1
+                    meteor.y = random.randint(-300, -METEOR_H)
+                    meteor.x = random.randint(0, WIDTH - METEOR_W)
+                    if sound_hit:
+                        sound_hit.play()
+
+                if num_players == 2 and meteor.colliderect(player2_rect) and lives2 > 0:
+                    if shield2_active:
+                        shield2_active = False
+                    else:
+                        lives2 -= 1
+                    meteor.y = random.randint(-300, -METEOR_H)
+                    meteor.x = random.randint(0, WIDTH - METEOR_W)
+                    if sound_hit:
+                        sound_hit.play()
 
         for sm in strong_meteor_list:
             sm.y += int(meteor_speed * 1.5)
 
             if sm.y > HEIGHT:
-                sm.y = random.randint(-6000, -STR_METEOR_H)
+                if phase_name == "Fase 3":
+                    sm.y = random.randint(-600, -STR_METEOR_H)
+                else:
+                    sm.y = random.randint(-6000, -STR_METEOR_H)
                 sm.x = random.randint(0, WIDTH - STR_METEOR_W)
                 score += 1
                 if sound_point:
@@ -531,7 +680,10 @@ while running:
                     lives1 -= 2
                     if lives1 < 0:
                         lives1 = 0
-                sm.y = random.randint(-6000, -STR_METEOR_H)
+                if phase_name == "Fase 3":
+                    sm.y = random.randint(-600, -STR_METEOR_H)
+                else:
+                    sm.y = random.randint(-6000, -STR_METEOR_H)
                 sm.x = random.randint(0, WIDTH - STR_METEOR_W)
                 if sound_hit:
                     sound_hit.play()
@@ -543,7 +695,10 @@ while running:
                     lives2 -= 2
                     if lives2 < 0:
                         lives2 = 0
-                sm.y = random.randint(-6000, -STR_METEOR_H)
+                if phase_name == "Fase 3":
+                    sm.y = random.randint(-600, -STR_METEOR_H)
+                else:
+                    sm.y = random.randint(-6000, -STR_METEOR_H)
                 sm.x = random.randint(0, WIDTH - STR_METEOR_W)
                 if sound_hit:
                     sound_hit.play()
@@ -625,8 +780,12 @@ while running:
                 screen.blit(shield_surf, (sx2, sy2))
             screen.blit(player2_img, player2_rect)
 
-        for meteor in meteor_list:
-            screen.blit(meteor_img, meteor)
+        for bullet in bullets:
+            pygame.draw.rect(screen, RED, bullet["rect"])
+
+        if phase_name != "Fase 3":
+            for meteor in meteor_list:
+                screen.blit(meteor_img, meteor)
 
         for sm in strong_meteor_list:
             screen.blit(meteor_strong_img, sm)
@@ -663,16 +822,36 @@ while running:
     elif game_state == STATE_OVER:
         screen.blit(background_img, (0, 0))
 
-        box = pygame.Surface((750, 375))
+        box = pygame.Surface((750, 480))
         box.set_alpha(230)
         box.fill((240, 240, 240))
-        screen.blit(box, box.get_rect(center=(WIDTH//2, HEIGHT//2)))
+        box_rect = box.get_rect(center=(WIDTH//2, HEIGHT//2))
+        screen.blit(box, box_rect)
 
         t = big_font.render("GAME OVER", True, BLACK)
-        screen.blit(t, t.get_rect(center=(WIDTH//2, HEIGHT//2 - 105)))
+        screen.blit(t, t.get_rect(center=(WIDTH//2, box_rect.top + 70)))
 
         tscore = font.render(f"Pontuação final: {score}", True, BLACK)
-        screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, HEIGHT//2 - 30)))
+        screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, box_rect.top + 130)))
+
+        if num_players == 1:
+            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyed}  Vidas finais: {lives1}", True, BLACK)
+            screen.blit(tstats, tstats.get_rect(center=(WIDTH//2, box_rect.top + 170)))
+            tname = small_font.render(f"Seu nome: {name_input}", True, BLACK)
+            screen.blit(tname, tname.get_rect(center=(WIDTH//2, box_rect.top + 210)))
+            best = get_best_entry()
+            if best:
+                trec = small_font.render(
+                    f"Recorde: {best['name']} - {best['score']} pts, {best['destroyed']} meteoros, {best['lives']} vidas",
+                    True, BLACK
+                )
+                screen.blit(trec, trec.get_rect(center=(WIDTH//2, box_rect.top + 250)))
+            thint = small_font.render("Digite seu nome e clique em 'Salvar no Leaderboard'", True, BLACK)
+            screen.blit(thint, thint.get_rect(center=(WIDTH//2, box_rect.top + 285)))
+
+        restart_button.center     = (WIDTH//2, box_rect.top + 340)
+        quit_button.center        = (WIDTH//2, box_rect.top + 395)
+        leaderboard_button.center = (WIDTH//2, box_rect.top + 450)
 
         pygame.draw.rect(screen, WHITE, restart_button, border_radius=10)
         tr = small_font.render("Reiniciar", True, BLACK)
@@ -681,20 +860,44 @@ while running:
         pygame.draw.rect(screen, WHITE, quit_button, border_radius=10)
         tq = small_font.render("Sair", True, BLACK)
         screen.blit(tq, tq.get_rect(center=quit_button.center))
+
+        pygame.draw.rect(screen, WHITE, leaderboard_button, border_radius=10)
+        tl = small_font.render("Salvar no Leaderboard", True, BLACK)
+        screen.blit(tl, tl.get_rect(center=leaderboard_button.center))
 
     elif game_state == STATE_WIN:
         screen.blit(background_img, (0, 0))
 
-        box = pygame.Surface((750, 375))
+        box = pygame.Surface((750, 480))
         box.set_alpha(230)
         box.fill((240, 240, 240))
-        screen.blit(box, box.get_rect(center=(WIDTH//2, HEIGHT//2)))
+        box_rect = box.get_rect(center=(WIDTH//2, HEIGHT//2))
+        screen.blit(box, box_rect)
 
         t = big_font.render("VOCÊ VENCEU!", True, BLACK)
-        screen.blit(t, t.get_rect(center=(WIDTH//2, HEIGHT//2 - 105)))
+        screen.blit(t, t.get_rect(center=(WIDTH//2, box_rect.top + 70)))
 
         tscore = font.render(f"Pontuação: {score}", True, BLACK)
-        screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, HEIGHT//2 - 30)))
+        screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, box_rect.top + 130)))
+
+        if num_players == 1:
+            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyed}  Vidas finais: {lives1}", True, BLACK)
+            screen.blit(tstats, tstats.get_rect(center=(WIDTH//2, box_rect.top + 170)))
+            tname = small_font.render(f"Seu nome: {name_input}", True, BLACK)
+            screen.blit(tname, tname.get_rect(center=(WIDTH//2, box_rect.top + 210)))
+            best = get_best_entry()
+            if best:
+                trec = small_font.render(
+                    f"Recorde: {best['name']} - {best['score']} pts, {best['destroyed']} meteoros, {best['lives']} vidas",
+                    True, BLACK
+                )
+                screen.blit(trec, trec.get_rect(center=(WIDTH//2, box_rect.top + 250)))
+            thint = small_font.render("Digite seu nome e clique em 'Salvar no Leaderboard'", True, BLACK)
+            screen.blit(thint, thint.get_rect(center=(WIDTH//2, box_rect.top + 285)))
+
+        restart_button.center     = (WIDTH//2, box_rect.top + 340)
+        quit_button.center        = (WIDTH//2, box_rect.top + 395)
+        leaderboard_button.center = (WIDTH//2, box_rect.top + 450)
 
         pygame.draw.rect(screen, WHITE, restart_button, border_radius=10)
         tr = small_font.render("Reiniciar", True, BLACK)
@@ -703,6 +906,10 @@ while running:
         pygame.draw.rect(screen, WHITE, quit_button, border_radius=10)
         tq = small_font.render("Sair", True, BLACK)
         screen.blit(tq, tq.get_rect(center=quit_button.center))
+
+        pygame.draw.rect(screen, WHITE, leaderboard_button, border_radius=10)
+        tl = small_font.render("Salvar no Leaderboard", True, BLACK)
+        screen.blit(tl, tl.get_rect(center=leaderboard_button.center))
 
     elif game_state == STATE_CREDITS:
         screen.blit(background_img, (0, 0))
@@ -759,7 +966,33 @@ while running:
         tm = small_font.render("Salvar e ir ao menu", True, BLACK)
         screen.blit(tm, tm.get_rect(center=pause_menu_button.center))
 
+    elif game_state == STATE_LEADERBOARD:
+        screen.blit(background_img, (0, 0))
+
+        box = pygame.Surface((800, 500))
+        box.set_alpha(230)
+        box.fill((240, 240, 240))
+        box_rect = box.get_rect(center=(WIDTH//2, HEIGHT//2))
+        screen.blit(box, box_rect)
+
+        t = big_font.render("Leaderboard", True, BLACK)
+        screen.blit(t, t.get_rect(center=(WIDTH//2, box_rect.top + 80)))
+
+        #vai mostrar o top 5 no leaderboard
+        if leaderboard:
+            start_y = box_rect.top + 150
+            for i, entry in enumerate(leaderboard[:5]):
+                line = f"{i+1}. {entry['name']} - {entry['score']} pts, {entry['destroyed']} meteoros, {entry['lives']} vidas"
+                tl = small_font.render(line, True, BLACK)
+                screen.blit(tl, tl.get_rect(center=(WIDTH//2, start_y + i*40)))
+        else:
+            tl = small_font.render("Nenhum registro ainda.", True, BLACK)
+            screen.blit(tl, tl.get_rect(center=(WIDTH//2, box_rect.top + 180)))
+
+        pygame.draw.rect(screen, WHITE, back_button, border_radius=10)
+        tb = small_font.render("Voltar ao menu", True, BLACK)
+        screen.blit(tb, tb.get_rect(center=back_button.center))
+
     pygame.display.flip()
 
 pygame.quit()
-
