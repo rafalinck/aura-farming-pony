@@ -25,6 +25,8 @@ ASSETS = {
     "background_fase1": "-",  
     "background_fase2": "-",  
     "background_fase3": "-",
+    "background_gameover": "-",
+    "background_win": "-",
     "player": "-",
     "player2": "-",
     "meteor": "-",
@@ -55,6 +57,8 @@ background_img = load_image(ASSETS["background"], WHITE, (WIDTH, HEIGHT))
 background_fase1  = load_image(ASSETS["background_fase1"], WHITE, (WIDTH, HEIGHT))
 background_fase2  = load_image(ASSETS["background_fase2"], WHITE, (WIDTH, HEIGHT))
 background_fase3  = load_image(ASSETS["background_fase3"], WHITE, (WIDTH, HEIGHT))
+background_gameover = load_image(ASSETS["background_gameover"], WHITE, (WIDTH, HEIGHT))
+background_win = load_image(ASSETS["background_win"], WHITE, (WIDTH, HEIGHT))
 player_img  = load_image(ASSETS["player"], BLUE, (120, 90))
 player2_img = load_image(ASSETS["player2"], BLUE, (120, 90))
 meteor_img  = load_image(ASSETS["meteor"], RED, (60, 60))
@@ -820,7 +824,7 @@ while running:
             phase_alert_timer -= 1
 
     elif game_state == STATE_OVER:
-        screen.blit(background_img, (0, 0))
+        screen.blit(background_gameover, (0, 0))
 
         box = pygame.Surface((750, 480))
         box.set_alpha(230)
@@ -866,7 +870,7 @@ while running:
         screen.blit(tl, tl.get_rect(center=leaderboard_button.center))
 
     elif game_state == STATE_WIN:
-        screen.blit(background_img, (0, 0))
+        screen.blit(background_win, (0, 0))
 
         box = pygame.Surface((750, 480))
         box.set_alpha(230)
@@ -881,7 +885,7 @@ while running:
         screen.blit(tscore, tscore.get_rect(center=(WIDTH//2, box_rect.top + 130)))
 
         if num_players == 1:
-            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyed}  Vidas finais: {lives1}", True, BLACK)
+            tstats = small_font.render(f"Meteoros destruídos: {meteors_destroyidos}  Vidas finais: {lives1}", True, BLACK)
             screen.blit(tstats, tstats.get_rect(center=(WIDTH//2, box_rect.top + 170)))
             tname = small_font.render(f"Seu nome: {name_input}", True, BLACK)
             screen.blit(tname, tname.get_rect(center=(WIDTH//2, box_rect.top + 210)))
@@ -930,7 +934,7 @@ while running:
         screen.blit(tb, tb.get_rect(center=back_button.center))
 
     elif game_state == STATE_PVP_WIN:
-        screen.blit(background_img, (0, 0))
+        screen.blit(background_win, (0, 0))
 
         box = pygame.Surface((750, 375))
         box.set_alpha(230)
